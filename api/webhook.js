@@ -50,6 +50,7 @@ async function askOpenAI(message) {
     body: JSON.stringify({
       model: "gpt-5-mini",
       input: message,
+      tools: [{ type: "web_search" }],
     }),
   });
 
