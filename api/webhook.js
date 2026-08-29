@@ -79,7 +79,6 @@ export default async function handler(req, res) {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body) : req.body;
 
-    res.status(200).send("OK");
 
     for (const event of body.events || []) {
       if (
@@ -91,7 +90,9 @@ export default async function handler(req, res) {
         await replyLine(event.replyToken, answer);
       }
     }
-  } catch (error) {
+  }
+return res.status(200).send("OK");
+} catch (error) {
     console.error(error);
 
     if (!res.headersSent) {
