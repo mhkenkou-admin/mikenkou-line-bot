@@ -96,6 +96,11 @@ export default async function handler(req, res) {
         : req.body;
 
     for (const event of body.events || []) {
+      if (event.source?.userId !== process.env.OWNER_LINE_USER_ID) {
+
+  continue;
+
+}
       if (
         event.type === "message" &&
         event.message?.type === "text" &&
