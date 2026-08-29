@@ -2,13 +2,13 @@ import crypto from "node:crypto";
 
 const LINE_REPLY_URL = "https://api.line.me/v2/bot/message/reply";
 
-function verifySignature(body, signature) {
+function verifySignature(rawBody, signature) {
+  if (!signature) return false;
+
   const expected = crypto
     .createHmac("sha256", process.env.LINE_CHANNEL_SECRET)
-    .update(body)
+    .update(rawBody)
     .digest("base64");
-
-  if (!signature) return false;
 
   const a = Buffer.from(expected);
   const b = Buffer.from(signature);
@@ -25,12 +25,18 @@ async function replyLine(replyToken, text) {
     },
     body: JSON.stringify({
       replyToken,
-      messages: [{ type: "text", text: text.slice(0, 5000) }],
+      messages: [
+        {
+          type: "text",
+          text,
+        },
+      ],
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`LINE reply failed: ${response.status}`);
+    const errorText = await response.text();
+    throw new Error(`LINE error: ${response.status} ${errorText}`);
   }
 }
 
@@ -42,33 +48,41 @@ async function askOpenAI(message) {
       Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "gpt-5.6-luna",
-      instructions:
-        "あなたは未来建築工芸（MIKENKOU）のLINEアシスタントです。日本語で、わかりやすく簡潔に回答してください。",
+      model: "gpt-5-mini",
       input: message,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI failed: ${response.status}`);
+    const errorText = await response.text();
+    throw new Error(`OpenAI error: ${response.status} ${errorText}`);
   }
 
   const data = await response.json();
-  return data.output_text || "申し訳ありません。回答を作成できませんでした。";
+
+  if (data.output_text) {
+    return data.output_text;
+  }
+
+  const text = data.output
+    ?.flatMap((item) => item.content || [])
+    ?.filter((item) => item.type === "output_text")
+    ?.map((item) => item.text)
+    ?.join("\n");
+
+  return text || "すみません。回答を作れませんでした。";
 }
 
 export default async function handler(req, res) {
-  if (req.method === "GET") {
-    return res.status(200).send("MIKENKOU LINE BOT OK");
-  }
-
   if (req.method !== "POST") {
-    return res.status(405).send("Method Not Allowed");
+    return res.status(200).send("MIKENKOU LINE BOT");
   }
 
   try {
     const rawBody =
-      typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+      typeof req.body === "string"
+        ? req.body
+        : JSON.stringify(req.body);
 
     const signature = req.headers["x-line-signature"];
 
@@ -77,8 +91,9 @@ export default async function handler(req, res) {
     }
 
     const body =
-      typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-
+      typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : req.body;
 
     for (const event of body.events || []) {
       if (
@@ -90,13 +105,13 @@ export default async function handler(req, res) {
         await replyLine(event.replyToken, answer);
       }
     }
-  }
-return res.status(200).send("OK");
-} catch (error) {
+
+    return res.status(200).send("OK");
+  } catch (error) {
     console.error(error);
 
     if (!res.headersSent) {
-      return res.status(500).send("Server Error");
+      return res.status(500).send("Server error");
     }
   }
 }
