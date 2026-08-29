@@ -96,12 +96,12 @@ export default async function handler(req, res) {
         : req.body;
 
     for (const event of body.events || []) {
-      if (event.source?.userId !== process.env.OWNER_LINE_USER_ID) {
+      const isGroup = event.source?.type === "group" || event.source?.type === "room";
 
-  continue;
+const text = event.message?.text || "";
 
-}
-      if (
+if (isGroup && !text.includes("管理者") && !text.includes("@管理者")) continue;
+if (
         event.type === "message" &&
         event.message?.type === "text" &&
         event.replyToken
